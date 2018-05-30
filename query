@@ -1,0 +1,25 @@
+#!/bin/bash
+
+DIR=$(cd $(dirname $0); pwd -P)
+
+source ${DIR}/config.sh 
+
+function usage {
+	echo "USAGE: $(basename $0) attr type last tags"
+}
+
+function query {
+	case "$1" in
+	'attr')
+		query="attributes/restSearch/download"
+		po="{\"type\": \"$2\", \"last\": \"$3\", \"tags\":\"$4\"}"
+		;;
+	*)
+		usage
+		;;
+	esac	
+
+	curl -k -L -s -X POST -H "Content-Type: application/json" -H "Authorization:${TOKEN}" -H "Accept:application/json" --data "${po}" ${PROTO}://${HOST}:${PORT}/${query} # | jq '.'
+}
+
+query $*
