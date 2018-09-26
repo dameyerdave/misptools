@@ -1,4 +1,4 @@
 PROTO=https
-HOST=127.0.0.1
+HOST=misp0.terreactive.ch
 PORT=443
-TOKEN=w1KV8vumXow2C0u8zquWt0k3pUsObXJEDjQaTafT
+TOKEN=Tzn4EOsCB41iW1E4AayjZiPsBlRTeUMjlzke44zd
