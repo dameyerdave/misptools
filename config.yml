@@ -1,0 +1,86 @@
+---
+# use admin
+# db.adminCommand({'setParameter': 1, 'failIndexKeyTooLong': false})
+# db.iocs.createIndex({"type": 1})
+# db.iocs.createIndex({"value": 1, "url":1}, {unique: true})
+# db.iocs.createIndex({"uuid": 1}, {unique: true})
+mongo:
+  host: localhost
+  port: 27018
+  db: ioc
+feeds:
+- name: CIRCL OSINT Feed
+  provider: CIRCL
+  url: https://www.circl.lu/doc/misp/feed-osint
+  format: misp
+- name: The Botvrij.eu Data
+  provider: Botvrij.eu
+  url: http://www.botvrij.eu/data/feed-osint
+  format: misp
+- name: inThreat OSINT Feed
+  provider: inThreat
+  url: https://feeds.inthreat.com/osint/misp/
+  format: misp
+  timestampformat: '%sN'
+- name: All current domains belonging to known malicious DGAs
+  provider: osint.bambenekconsulting.com
+  url: http://osint.bambenekconsulting.com/feeds/dga-feed-high.csv
+  format: csv
+  category: Network activity
+  type: domain
+  delimiter: ','
+  valuefield: 0 
+  timestampfield: 2
+  timestampformat: '%Y-%m-%d'
+  commentfield: 1
+- name: URLHaus Malware URLs
+  provider: Abuse.ch
+  url: https://urlhaus.abuse.ch/downloads/csv/
+  format: csv
+  category: Network activity
+  type: url
+  delimiter: ','
+  valuefield: 2
+  timestampfield: 1
+  timestampformat: '%Y-%m-%d %H:%M:%S'
+  commentfield: 4
+  tags: 
+  - malware
+- name: malwaredomainlist
+  provider: malwaredomainlist
+  url: https://panwdbl.appspot.com/lists/mdl.txt
+  format: csv
+  category: Network activity
+  type: ip-dst
+  comment: malwaredomainlist
+  delimiter: ','
+- name: ZeuS compromised URL blocklist
+  provider: zeustracker.abuse.ch
+  url: https://zeustracker.abuse.ch/blocklist.php?download=compromised
+  format: csv
+  type: url
+  delimiter: ','
+- name: Tor exit nodes
+  provider: TOR Node List from dan.me.uk
+  url: https://www.dan.me.uk/torlist/?exit
+  format: csv
+  type: ip-src
+  category: Network activity
+  delimiter: ','
+  tags:
+  - tor
+- name: alienvault reputation generic
+  provider: .alienvault.com
+  url: http://reputation.alienvault.com/reputation.generic
+  format: csv
+  type: ip-dst
+  category: Network activity
+  delimiter: ' '
+- name: OpenPhish url list
+  provider: openphish.com
+  url: https://openphish.com/feed.txt
+  format: csv
+  type: url
+  category: Network activity
+  tags:
+  - phishing
