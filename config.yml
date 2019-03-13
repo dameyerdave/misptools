@@ -2,27 +2,35 @@
 # use admin
 # db.adminCommand({'setParameter': 1, 'failIndexKeyTooLong': false})
 # db.iocs.createIndex({"type": 1})
+# db.iocs.createIndex({"provider": 1})
 # db.iocs.createIndex({"value": 1, "url":1}, {unique: true})
 # db.iocs.createIndex({"uuid": 1}, {unique: true})
 mongo:
   host: localhost
   port: 27018
   db: ioc
+kaspersky:
+  pemfile: feeds.pem
+  tempdir: '/tmp'
 feeds:
 - name: CIRCL OSINT Feed
+  disabled: false
   provider: CIRCL
   url: https://www.circl.lu/doc/misp/feed-osint
   format: misp
 - name: The Botvrij.eu Data
+  disabled: false
   provider: Botvrij.eu
   url: http://www.botvrij.eu/data/feed-osint
   format: misp
 - name: inThreat OSINT Feed
+  disabled: false
   provider: inThreat
   url: https://feeds.inthreat.com/osint/misp/
   format: misp
   timestampformat: '%sN'
 - name: All current domains belonging to known malicious DGAs
+  disabled: false
   provider: osint.bambenekconsulting.com
   url: http://osint.bambenekconsulting.com/feeds/dga-feed-high.csv
   format: csv
@@ -34,6 +42,7 @@ feeds:
   timestampformat: '%Y-%m-%d'
   commentfield: 1
 - name: URLHaus Malware URLs
+  disabled: false
   provider: Abuse.ch
   url: https://urlhaus.abuse.ch/downloads/csv/
   format: csv
@@ -47,6 +56,7 @@ feeds:
   tags: 
   - malware
 - name: malwaredomainlist
+  disabled: false
   provider: malwaredomainlist
   url: https://panwdbl.appspot.com/lists/mdl.txt
   format: csv
@@ -55,12 +65,14 @@ feeds:
   comment: malwaredomainlist
   delimiter: ','
 - name: ZeuS compromised URL blocklist
+  disabled: false
   provider: zeustracker.abuse.ch
   url: https://zeustracker.abuse.ch/blocklist.php?download=compromised
   format: csv
   type: url
   delimiter: ','
 - name: Tor exit nodes
+  disabled: false
   provider: TOR Node List from dan.me.uk
   url: https://www.dan.me.uk/torlist/?exit
   format: csv
@@ -70,6 +82,7 @@ feeds:
   tags:
   - tor
 - name: alienvault reputation generic
+  disabled: false
   provider: .alienvault.com
   url: http://reputation.alienvault.com/reputation.generic
   format: csv
@@ -77,6 +90,7 @@ feeds:
   category: Network activity
   delimiter: ' '
 - name: OpenPhish url list
+  disabled: false
   provider: openphish.com
   url: https://openphish.com/feed.txt
   format: csv
@@ -84,3 +98,105 @@ feeds:
   category: Network activity
   tags:
   - phishing
+- name: Phishtank online valid phishing
+  disabled: false
+  provider: Phishtank
+  url: http://data.phishtank.com/data/online-valid.csv
+  format: csv
+  ignorecsvheader: true
+  type: url
+  category: phishing
+  valuefield: 1
+  linkfield: 2
+  timestampfield: 5
+  timestampformat: '%Y-%m-%dT%H:%M:%S%z'
+  commentfield: 7
+  tags:
+  - phishing
+- name: Malwaredomains Malware Prevention
+  disabled: false
+  provider: Phishtank
+  provider: malwaredomain.com
+  url: http://mirror1.malwaredomains.com/files/justdomains
+  format: csv
+  type: domain
+  category: malware
+  tags:
+  - malware
+- name: cybercrime-tracker.net - all
+  disabled: false
+  provider: Phishtank
+  provider: cybercrime-tracker.net
+  url: http://cybercrime-tracker.net/all.php
+  format: csv
+  type: url
+  category: cybercrime
+  tags:
+  - cybercrime
+- name: Ransomware Tracker CSV Feed URLs
+  disabled: false
+  provider: Phishtank
+  provider: Ransomware Tracker abuse.ch
+  url: https://ransomwaretracker.abuse.ch/feeds/csv/
+  format: csv
+  type: url
+  category: randsomeware
+  valuefield: 4
+  timestampfield: 0
+  timestampformat: '%Y-%m-%d %H:%M:%S'
+  commentfield: 2
+  tags:
+  - randsomeware
+- name: Ransomware Tracker CSV Feed Domains
+  disabled: false
+  provider: Phishtank
+  provider: Ransomware Tracker abuse.ch
+  url: https://ransomwaretracker.abuse.ch/feeds/csv/
+  format: csv
+  type: domain
+  category: randsomeware
+  valuefield: 3
+  timestampfield: 0
+  timestampformat: '%Y-%m-%d %H:%M:%S'
+  commentfield: 2
+  tags:
+  - randsomeware
+- name: OpenPhish url list
+  disabled: false
+  provider: openphish.com
+  url: https://openphish.com/feed.txt
+  format: csv
+  type: url
+  category: phishing
+  tags:
+  - phishing
+- name: Kaspersky Malicious URL Data Feed
+  disabled: false
+  provider: Kaspersky
+  url: https://wlinfo.kaspersky.com/api/v1.0/feeds/64/updates/
+  format: kaspersky
+  timestampformat: '%d.%m.%Y %H:%M'
+- name: Kaspersky Phishing URL Data Feed
+  disabled: false
+  provider: Kaspersky
+  url: https://wlinfo.kaspersky.com/api/v1.0/feeds/59/updates/
+  format: kaspersky
+  timestampformat: '%d.%m.%Y %H:%M'
+- name: Kaspersky Botnet CnC URL Data Feed
+  disabled: false
+  provider: Kaspersky
+  url: https://wlinfo.kaspersky.com/api/v1.0/feeds/65/updates/
+  format: kaspersky
+  timestampformat: '%d.%m.%Y %H:%M'
+- name: Kaspersky Malicious Hash Data Feed
+  disabled: false
+  provider: Kaspersky
+  url: https://wlinfo.kaspersky.com/api/v1.0/feeds/66/updates/
+  format: kaspersky
+  timestampformat: '%d.%m.%Y %H:%M'
+- name: Kaspersky Ransomware URL Data Feed
+  disabled: true
+  provider: Kaspersky
+  url: https://wlinfo.kaspersky.com/api/v1.0/feeds/99/updates/
+  format: kaspersky
+  timestampformat: '%d.%m.%Y %H:%M'
