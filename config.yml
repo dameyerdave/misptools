@@ -5,6 +5,8 @@
 # db.iocs.createIndex({"provider": 1})
 # db.iocs.createIndex({"value": 1, "url":1}, {unique: true})
 # db.iocs.createIndex({"uuid": 1}, {unique: true})
+general:
+  threads: 16
 mongo:
   host: localhost
   port: 27018
@@ -89,15 +91,6 @@ feeds:
   type: ip-dst
   category: Network activity
   delimiter: ' '
-- name: OpenPhish url list
-  disabled: false
-  provider: openphish.com
-  url: https://openphish.com/feed.txt
-  format: csv
-  type: url
-  category: Network activity
-  tags:
-  - phishing
 - name: Phishtank online valid phishing
   disabled: false
   provider: Phishtank

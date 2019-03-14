@@ -15,6 +15,7 @@ from datetime import datetime as dt
 from pymongo import MongoClient
 from pymongo.errors import BulkWriteError
 from contextlib import closing
+from multiprocessing.dummy import Pool as ThreadPool
 
 class KasperskyReader:
     def __init__(self, config):
@@ -82,6 +83,10 @@ class IOCReader:
         self.col = self.db.iocs
         self.kaspersky_reader = KasperskyReader(self.config['kaspersky'])
     
+    def log(self, msg, feed, sev='INFO'):
+        timestamp = dt.now().strftime('%Y-%m-%d %H:%M:%S')
+        print(timestamp + ' ' + sev +  ' [' + feed['name'] + ']:', msg)
+
     def read_config(self):
         with open(self.CONFIG_FILE) as cf:
            self.config = yaml.safe_load(cf)
@@ -102,19 +107,29 @@ class IOCReader:
         obj['tags'] = tags
         return obj
 
+    def process_feed(self, feed):
+        self.log("Processing feed ...", feed)
+        if feed['format'] == 'kaspersky':
+            self.process_kaspersky_feed(feed)
+        if feed['format'] == 'misp':
+            resp = requests.get(feed['url'] + '/manifest.json')
+            self.process_misp_feed(resp, feed)
+        elif feed['format'] == 'csv':
+            resp = requests.get(feed['url'], stream=True)
+            self.process_csv_feed(resp, feed)
+        self.log("Feed finished.", feed)
+
     def process_feeds(self):
+        feeds = []
         for feed in self.config['feeds']:
             if 'disabled' in feed and feed['disabled'] == True:
                 continue
-            print("Processing feed '" + feed['name'] + "'...")
-            if feed['format'] == 'kaspersky':
-                self.process_kaspersky_feed(feed)
-            if feed['format'] == 'misp':
-                resp = requests.get(feed['url'] + '/manifest.json')
-                self.process_misp_feed(resp, feed)
-            elif feed['format'] == 'csv':
-                resp = requests.get(feed['url'], stream=True)
-                self.process_csv_feed(resp, feed)
+            feeds.append(feed)
+        if len(feeds) > 0:
+            pool = ThreadPool(self.config['general']['threads'])
+            pool.map(self.process_feed, feeds)
+            pool.close() 
+            pool.join()
    
     def process_kaspersky_feed(self, feed):
         iocs = []
@@ -142,7 +157,7 @@ class IOCReader:
                         _uuid = str(uuid.uuid4())
                         ioc = self.create_ioc(feed, value, info, _type, timestamp, category, comment, _uuid, tags)
                         iocs.append(ioc)
-        self.load_to_mongo(iocs)
+        self.load_to_mongo(iocs, feed)
 
     def process_misp_feed(self, resp, feed):
         iocs = []
@@ -167,7 +182,7 @@ class IOCReader:
                     to_ids = attr['to_ids']
                     ioc = self.create_ioc(feed, value, info, _type, timestamp, category, comment, _uuid, tags, link, to_ids)
                     iocs.append(ioc)
-        self.load_to_mongo(iocs)
+        self.load_to_mongo(iocs, feed)
 
     def process_csv_feed(self, resp, feed):
         delimiter = feed['delimiter'] if 'delimiter' in feed else ','
@@ -191,7 +206,7 @@ class IOCReader:
                     tags = feed['tags'] if 'tags' in feed else []
                     ioc = self.create_ioc(feed, value, info, _type, timestamp, category, comment, _uuid, tags, link)
                     iocs.append(ioc)
-        self.load_to_mongo(iocs)
+        self.load_to_mongo(iocs, feed)
     
     def convert_timestamp(self, timestamp, feed):
         if 'timestampformat' in feed:
@@ -204,15 +219,19 @@ class IOCReader:
                     timestamp = dt.strftime(dateparser.parse(timestamp), '%s')
         return int(timestamp)
 
-    def load_to_mongo(self, iocs):
-        bulk = self.col.initialize_ordered_bulk_op()
-        for ioc in iocs:
-            bulk.find({'value': ioc['value']}).upsert().replace_one(ioc)
-        try:
-            bulk.execute()
-        except BulkWriteError as e:
-            print(e)
-            pass
+    def load_to_mongo(self, iocs, feed):
+        if len(iocs) > 0:
+            self.log("Loading to mongodb...", feed)
+            bulk = self.col.initialize_ordered_bulk_op()
+            for ioc in iocs:
+                bulk.find({'value': ioc['value']}).upsert().replace_one(ioc)
+            try:
+                bulk.execute()
+            except BulkWriteError as e:
+                self.log(e, feed, 'ERROR')
+                pass
+        else:
+            self.log("Nothing to load to mongodb!", feed, 'ERROR')
          
 def main():
     iocreader = IOCReader()
