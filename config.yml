@@ -1,9 +1,11 @@
 ---
 # use admin
 # db.adminCommand({'setParameter': 1, 'failIndexKeyTooLong': false})
+# db.iocs.createIndex({timestamp: -1})
 # db.iocs.createIndex({"type": 1})
 # db.iocs.createIndex({"provider": 1})
-# db.iocs.createIndex({"value": 1, "url":1}, {unique: true})
+# db.iocs.createIndex({"value": 1, "url": 1}, {unique: true})
+# db.iocs.createIndex({"value": "text"})
 # db.iocs.createIndex({"uuid": 1}, {unique: true})
 general:
   threads: 16
@@ -12,7 +14,7 @@ mongo:
   port: 27018
   db: ioc
 kaspersky:
-  pemfile: feeds.pem
+  pemfile: /home/dave/git/misptools/feeds.pem
   tempdir: '/tmp'
 feeds:
 - name: CIRCL OSINT Feed
@@ -193,3 +195,10 @@ feeds:
   url: https://wlinfo.kaspersky.com/api/v1.0/feeds/99/updates/
   format: kaspersky
   timestampformat: '%d.%m.%Y %H:%M'
+- name: listdynamic dns providers
+  disabled: false
+  provider: http://dns-bh.sagadc.org
+  url: http://dns-bh.sagadc.org/dynamic_dns.txt
+  format: csv
+  delimiter: '#'
+  commentfield: 1

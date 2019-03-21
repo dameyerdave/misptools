@@ -11,6 +11,8 @@ import dateparser
 import urllib.request
 import re
 import zipfile
+import fcntl
+from timeout import timeout
 from datetime import datetime as dt
 from pymongo import MongoClient
 from pymongo.errors import BulkWriteError
@@ -65,17 +67,19 @@ class KasperskyReader:
             return ret
 
 class IOCReader:
-    CONFIG_FILE = "config.yml"
+    CONFIG_FILE = os.path.dirname(os.path.realpath(__file__)) + '/config.yml'
     kasp_type_lookup = {
             1: 'domain', 
-            2: 'ip-dst', 
-            3: 'filename',
+            2: 'domain', 
+            3: 'url',
             4: 'url',
             19: 'url',
             20: 'url',
             21: 'url',
             22: 'url' 
     }
+    re_ip = re.compile(r'\d+\.\d+\.\d+\.\d+')
+
     def __init__(self):
         self.read_config()
         mongo = MongoClient(self.config['mongo']['host'], self.config['mongo']['port'])
@@ -139,6 +143,9 @@ class IOCReader:
                 value = attr['mask']
                 _type = self.kasp_type_lookup[attr['type']]
                 _uuid = str(uuid.uuid4())
+            if _type == 'domain':
+                if self.re_ip.match(value):
+                    _type = 'ip-dst'
             info = feed['name']
             timestamp = attr['last_seen'] if 'last_seen' in attr else attr['first_seen'] if 'first_seen' in attr else dt.now().strftime('%s')
             timestamp = self.convert_timestamp(timestamp, feed)
@@ -233,9 +240,17 @@ class IOCReader:
         else:
             self.log("Nothing to load to mongodb!", feed, 'ERROR')
          
+@timeout(1200)
 def main():
     iocreader = IOCReader()
     iocreader.process_feeds()
 
 if __name__ == "__main__":
-    main()
+    pid_file = os.path.dirname(os.path.realpath(__file__)) + '.pid'
+    fp = open(pid_file, 'w')
+    try:
+        fcntl.lockf(fp, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        main()
+    except IOError:
+        print('Already running!')
+        sys.exit(0)
