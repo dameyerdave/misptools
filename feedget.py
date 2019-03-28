@@ -12,6 +12,7 @@ import urllib.request
 import re
 import zipfile
 import fcntl
+import threading
 from timeout import timeout
 from datetime import datetime as dt
 from pymongo import MongoClient
@@ -63,8 +64,48 @@ class KasperskyReader:
             os.remove(temp_file)
             with open(filename) as f_in:
                 ret = json.load(f_in)
-            #os.remove(filename)
+            os.remove(filename)
             return ret
+
+class FeedStats:
+    lock = threading.Lock()
+    feed_stats = {}
+    def __init__(self):
+        self.start = dt.now()
+
+    def set(self, feed, key, value):
+        self.lock.acquire()
+        try:
+            if not feed['name'] in self.feed_stats:
+                self.feed_stats[feed['name']] = {}
+            self.feed_stats[feed['name']][key] = value
+        finally:
+            self.lock.release()
+
+    def get(self, feed, key):
+        self.lock.acquire()
+        try:
+            if feed['name'] in self.feed_stats:
+                if key in self.feed_stats[feed['name']]:
+                    return self.feed_stats[key]
+            return None
+        finally:
+            self.lock.release()
+    
+    def out(self):
+        self.lock.acquire()
+        try:
+            os.system('clear')
+            sum_iocs = 0
+            for key, stats in self.feed_stats.items():
+                if 'start' in stats and 'end' in stats and 'status' in stats and 'count' in stats and 'error' in stats:
+                    runtime = str(stats['end'] - stats['start']).split('.')[0]
+                    print('%-80s : %-10s : %10d : %10s : %s' % (key, stats['status'], stats['count'], runtime, stats['error']))
+                    sum_iocs = sum_iocs + stats['count']
+            total_runtime = str(dt.now()- self.start).split('.')[0]
+            print('%-80s : %-10s : %10d : %10s : %s' % ('Total', '', sum_iocs, total_runtime, ''))
+        finally:
+            self.lock.release()
 
 class IOCReader:
     CONFIG_FILE = os.path.dirname(os.path.realpath(__file__)) + '/config.yml'
@@ -80,13 +121,15 @@ class IOCReader:
     }
     re_ip = re.compile(r'\d+\.\d+\.\d+\.\d+')
 
+
     def __init__(self):
         self.read_config()
         mongo = MongoClient(self.config['mongo']['host'], self.config['mongo']['port'])
         self.db = mongo[self.config['mongo']['db']]
         self.col = self.db.iocs
         self.kaspersky_reader = KasperskyReader(self.config['kaspersky'])
-    
+        self.feed_stats = FeedStats()
+   
     def log(self, msg, feed, sev='INFO'):
         timestamp = dt.now().strftime('%Y-%m-%d %H:%M:%S')
         print(timestamp + ' ' + sev +  ' [' + feed['name'] + ']:', msg)
@@ -109,19 +152,29 @@ class IOCReader:
         obj['link'] = link if link is not None else ''
         obj['provider'] = feed['provider']
         obj['tags'] = tags
+        #self.log('Found IOC: ' + obj['value'], feed)
         return obj
 
     def process_feed(self, feed):
-        self.log("Processing feed ...", feed)
+        #self.log("Processing feed ...", feed)
+        self.feed_stats.set(feed, 'start', dt.now())
+        self.feed_stats.set(feed, 'end', dt.now())
+        self.feed_stats.set(feed, 'status', 'Running')
+        self.feed_stats.set(feed, 'error', '')
+        self.feed_stats.set(feed, 'count', 0)
+        self.feed_stats.out()
         if feed['format'] == 'kaspersky':
             self.process_kaspersky_feed(feed)
-        if feed['format'] == 'misp':
+        elif feed['format'] == 'misp':
             resp = requests.get(feed['url'] + '/manifest.json')
             self.process_misp_feed(resp, feed)
         elif feed['format'] == 'csv':
             resp = requests.get(feed['url'], stream=True)
             self.process_csv_feed(resp, feed)
-        self.log("Feed finished.", feed)
+        #self.log("Feed finished.", feed)
+        self.feed_stats.set(feed, 'status', 'Finished')
+        self.feed_stats.set(feed, 'end', dt.now())
+        self.feed_stats.out()
 
     def process_feeds(self):
         feeds = []
@@ -134,7 +187,8 @@ class IOCReader:
             pool.map(self.process_feed, feeds)
             pool.close() 
             pool.join()
-   
+        self.feed_stats.out()
+  
     def process_kaspersky_feed(self, feed):
         iocs = []
         attrs = self.kaspersky_reader.download_feed(feed['url'])
@@ -143,11 +197,11 @@ class IOCReader:
                 value = attr['mask']
                 _type = self.kasp_type_lookup[attr['type']]
                 _uuid = str(uuid.uuid4())
-            if _type == 'domain':
-                if self.re_ip.match(value):
-                    _type = 'ip-dst'
+                if _type == 'domain':
+                    if self.re_ip.match(value):
+                        _type = 'ip-dst'
             info = feed['name']
-            timestamp = attr['last_seen'] if 'last_seen' in attr else attr['first_seen'] if 'first_seen' in attr else dt.now().strftime('%s')
+            timestamp = attr['last_seen'] if 'last_seen' in attr else attr['first_seen'] if 'first_seen' in attr else int(dt.now().strftime('%s'))
             timestamp = self.convert_timestamp(timestamp, feed)
             category = attr['category'].lower() if 'category' in attr else 'unknown'
             comment = attr['threat'] if 'threat' in attr else attr['id']
@@ -200,15 +254,16 @@ class IOCReader:
                     feed['ignorecsvheader'] = False
                     continue
                 if not line.startswith("#"):
+                    line = re.sub(r'[\s]+', ' ', line) 
                     fields = list(csv.reader([line], delimiter=delimiter))[0]
-                    value = fields[feed['valuefield']] if 'valuefield' in feed else fields[0]
-                    info = fields[feed['infofield']] if 'infofield' in feed else feed['info'] if 'info' in feed else feed['name']
-                    _type = fields[feed['typefield']] if 'typefield' in feed else feed['type'] if 'type' in feed else 'unknown'
-                    timestamp = fields[feed['timestampfield']] if 'timestampfield' in feed else dt.now().strftime('%s')
+                    value = fields[feed['valuefield']] if 'valuefield' in feed and len(fields) > feed['valuefield'] else fields[0]
+                    info = fields[feed['infofield']] if 'infofield' in feed and len(fields) > feed['infofield'] else feed['info'] if 'info' in feed else feed['name']
+                    _type = fields[feed['typefield']] if 'typefield' in feed and len(fields) > feed['typefield'] else feed['type'] if 'type' in feed else 'unknown'
+                    timestamp = fields[feed['timestampfield']] if 'timestampfield' in feed and len(fields) > feed['timestampfield'] else dt.now().strftime('%s')
                     timestamp = self.convert_timestamp(timestamp, feed)
-                    category = fields[feed['categoryfield']] if 'categoryfield' in feed else feed['category'] if 'category' in feed else 'unknown'
-                    comment = fields[feed['commentfield']] if 'commentfield' in feed else feed['comment'] if 'comment' in feed else 'unknown'
-                    link = fields[feed['linkfield']] if 'linkfield' in feed else feed['link'] if 'link' in feed else ''
+                    category = fields[feed['categoryfield']] if 'categoryfield' in feed and len(fields) > feed['categoryfield'] else feed['category'] if 'category' in feed else 'unknown'
+                    comment = fields[feed['commentfield']] if 'commentfield' in feed and len(fields) > feed['commentfield'] else feed['comment'] if 'comment' in feed else 'unknown'
+                    link = fields[feed['linkfield']] if 'linkfield' in feed and len(fields) > feed['linkfield'] else feed['link'] if 'link' in feed else ''
                     _uuid = str(uuid.uuid4())
                     tags = feed['tags'] if 'tags' in feed else []
                     ioc = self.create_ioc(feed, value, info, _type, timestamp, category, comment, _uuid, tags, link)
@@ -228,17 +283,31 @@ class IOCReader:
 
     def load_to_mongo(self, iocs, feed):
         if len(iocs) > 0:
-            self.log("Loading to mongodb...", feed)
+            #self.log("Loading to mongodb (" + str(len(iocs)) + " iocs)...", feed)
+            self.feed_stats.set(feed, 'status', 'Loading')
+            self.feed_stats.set(feed, 'count', len(iocs))
+            self.feed_stats.set(feed, 'end', dt.now())
+            self.feed_stats.out()
             bulk = self.col.initialize_ordered_bulk_op()
+            now = dt.now()
             for ioc in iocs:
-                bulk.find({'value': ioc['value']}).upsert().replace_one(ioc)
+                obj = {}
+                obj['$setOnInsert'] = {}
+                obj['$setOnInsert']['createDate'] = now
+                ioc['modifyDate'] = now
+                obj['$set'] = ioc
+                bulk.find({'value': ioc['value']}).upsert().update_one(obj)
             try:
                 bulk.execute()
             except BulkWriteError as e:
-                self.log(e, feed, 'ERROR')
+                self.feed_stats.set(feed, 'error', 'Errors while loading to mongodb')
+                self.feed_stats.out()
+                #self.log(e, feed, 'ERROR')
                 pass
         else:
-            self.log("Nothing to load to mongodb!", feed, 'ERROR')
+            self.feed_stats.set(feed, 'error', 'No IOCs found')
+            self.feed_stats.out()
+            #self.log("Nothing to load to mongodb!", feed, 'ERROR')
          
 @timeout(1200)
 def main():
@@ -253,4 +322,7 @@ if __name__ == "__main__":
         main()
     except IOError:
         print('Already running!')
+        sys.exit(0)
+    except TimeoutError:
+        print('Script used too much time. Aborting!')
         sys.exit(0)
