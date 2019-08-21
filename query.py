@@ -216,6 +216,23 @@ try:
                             for key in lookup:
                                 if key == row[field]:
                                     row[field] = lookup[key]
+		# mvvalues to array
+                for mvcol in args.mv_cols:
+                    if mvcol in row:
+                        row[mvcol] = row[mvcol].split(SEP)				
+                for mvdistcol in args.mv_dist_cols:
+                    if mvdistcol in row:
+                        row[mvdistcol] = row[mvdistcol].split(SEP)				
+                # Numberic values without quotes
+                for idx,_ in row.items():
+                    if type(row[idx]) == str:
+                        if row[idx].isnumeric():
+                            row[idx] = int(row[idx])
+                    elif type(row[idx]) == list:
+                        for lidx in range(len(row[idx])):
+                            if row[idx][lidx].isnumeric():
+                                row[idx][lidx] = int(row[idx][lidx])
+                                lidx += 1
                 # Output
                 print(json.dumps(row))
 except Exception as e:
